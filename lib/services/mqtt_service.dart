@@ -6,27 +6,30 @@ class MqttService {
   late MqttServerClient client;
 
   Future<bool> connect() async {
-    // GANTI: Masukkan Cluster URL HiveMQ Anda (contoh: xxxxx.s1.eu.hivemq.cloud)
-    client = MqttServerClient('1ff784315caf430e9d7329650ca769b5.s1.eu.hivemq.cloud', 'flutter_client');
+    // ID unik menggunakan timestamp agar tidak bentrok dengan perangkat lain
+    String clientIdentifier = 'gempara_app_${DateTime.now().millisecondsSinceEpoch}';
+    
+    // Pastikan URL bersih tanpa mqtt://
+    client = MqttServerClient('1ff784315caf430e9d7329650ca769b5.s1.eu.hivemq.cloud', clientIdentifier);
     
     client.port = 8883; 
     client.secure = true;
-    client.logging(on: false);
+    client.logging(on: true); // Aktifkan log untuk melihat proses di console
     client.keepAlivePeriod = 20;
 
-    // Menangani keamanan koneksi (Penting untuk HiveMQ Cloud)
+    // Sangat penting untuk HiveMQ Cloud agar SSL tidak ditolak Android
     client.onBadCertificate = (dynamic cert) => true;
 
     final connMessage = MqttConnectMessage()
-        .withClientIdentifier('gempara_mobile_id')
-        .authenticateAs('mefby', 'Arema1987.') // GANTI: Username & Password HiveMQ
+        .withClientIdentifier(clientIdentifier)
+        .authenticateAs('mefby', 'Arema1987.') // Pastikan user & pass ini sesuai di Access Management
         .startClean()
         .withWillQos(MqttQos.atLeastOnce);
 
     client.connectionMessage = connMessage;
 
     try {
-      print('Menghubungkan ke HiveMQ...');
+      print('Menghubungkan ke HiveMQ dengan ID: $clientIdentifier');
       await client.connect();
     } catch (e) {
       print('Koneksi Gagal: $e');
@@ -38,6 +41,7 @@ class MqttService {
       print('Koneksi Berhasil!');
       return true;
     } else {
+      print('Status Koneksi: ${client.connectionStatus!.state}');
       client.disconnect();
       return false;
     }
