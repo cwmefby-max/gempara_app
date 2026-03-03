@@ -16,18 +16,24 @@ jobs:
         with:
           flutter-version: '3.19.0'
 
-      # Buat project flutter lengkap
+      # 1. Buat project flutter sementara
       - run: flutter create temp_app
 
-      # Hapus main bawaan
+      # 2. Hapus file bawaan yang tidak perlu
       - run: rm temp_app/lib/main.dart
+      - run: rm temp_app/pubspec.yaml
 
-      # Salin kode kamu ke project flutter
+      # 3. Salin SEMUA file kodingan DAN pubspec.yaml milikmu ke project
       - run: cp -r lib/* temp_app/lib/
+      - run: cp pubspec.yaml temp_app/
 
-      - run: cd temp_app && flutter pub get
-      - run: cd temp_app && flutter build apk --release
+      # 4. Jalankan perintah di dalam folder temp_app
+      - run: |
+          cd temp_app
+          flutter pub get
+          flutter build apk --release
 
+      # 5. Upload hasilnya
       - uses: actions/upload-artifact@v4
         with:
           name: app-release
