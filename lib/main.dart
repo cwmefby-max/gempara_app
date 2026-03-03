@@ -29,15 +29,23 @@ class _GemparaAppStage extends State<GemparaApp> {
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      systemNavigationBarColor: isDarkMode ? const Color(0xFF1E272E) : const Color(0xFFF0F3F7),
+      systemNavigationBarColor: isDarkMode ? const Color(0xFF1E272E) : const Color(0xFFF8F9FB),
       systemNavigationBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
     ));
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      theme: ThemeData(brightness: Brightness.light, scaffoldBackgroundColor: const Color(0xFFF0F3F7), useMaterial3: true),
-      darkTheme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: const Color(0xFF1E272E), useMaterial3: true),
+      theme: ThemeData(
+        brightness: Brightness.light, 
+        scaffoldBackgroundColor: const Color(0xFFF8F9FB), 
+        useMaterial3: true
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark, 
+        scaffoldBackgroundColor: const Color(0xFF1E272E), 
+        useMaterial3: true
+      ),
       home: MainNavigator(onThemeToggle: toggleTheme, isDark: isDarkMode),
     );
   }
@@ -54,7 +62,7 @@ class MainNavigator extends StatefulWidget {
 
 class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateMixin {
   bool isIotVisible = true; 
-  bool isLocked = false;
+  bool isLocked = true; 
   bool isRelayOn = false;
   bool isAlarmOn = false;
   bool isRouteActive = false;
@@ -65,6 +73,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
   bool isCompassActive = false;
 
   late AnimationController _scanController;
+  late AnimationController _panelController;
+  late Animation<Offset> _panelSlideAnimation;
   bool _showScanAnim = false;
 
   late PageController _infoPageController;
@@ -78,8 +88,14 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     _infoPageController = PageController(initialPage: _currentVirtualPage);
     _vehiclePageController = PageController(initialPage: _currentVirtualPage);
 
-    // Animasi scan dibuat lebih cepat (dari 1500ms ke 800ms)
     _scanController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    
+    _panelController = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _panelSlideAnimation = Tween<Offset>(begin: const Offset(0, -1.2), end: Offset.zero).animate(
+      CurvedAnimation(parent: _panelController, curve: Curves.easeInOutCubic)
+    );
+    
+    if (isIotVisible) _panelController.forward();
 
     _globalTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
@@ -91,9 +107,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     });
   }
 
-  // Fungsi getar instan
   void _vibrateInstan() {
-    HapticFeedback.lightImpact(); // Light impact lebih responsif untuk klik cepat
+    HapticFeedback.lightImpact();
   }
 
   void _triggerScan() async {
@@ -103,10 +118,21 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     setState(() => _showScanAnim = false);
   }
 
+  void _toggleIotPanel() {
+    _vibrateInstan();
+    if (isIotVisible) {
+      _panelController.reverse().then((_) => setState(() => isIotVisible = false));
+    } else {
+      setState(() => isIotVisible = true);
+      _panelController.forward();
+    }
+  }
+
   @override
   void dispose() {
     _globalTimer?.cancel();
     _scanController.dispose();
+    _panelController.dispose();
     _infoPageController.dispose();
     _vehiclePageController.dispose();
     super.dispose();
@@ -114,12 +140,12 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
 
   BoxDecoration neuBox({bool isPressed = false, double borderRadius = 20, bool isDisabled = false}) {
     bool isDark = widget.isDark;
-    Color bg = isDark ? const Color(0xFF1E272E) : const Color(0xFFF0F3F7);
+    Color bg = isDark ? const Color(0xFF1E272E) : const Color(0xFFFDFDFD); 
     if (isDisabled) bg = bg.withOpacity(0.5);
     
     Color shadowDark = isDark 
         ? Colors.black.withOpacity(0.35) 
-        : const Color(0xFF9EA7B3).withOpacity(0.25);
+        : const Color(0xFFD1D9E6).withOpacity(0.4);
 
     return BoxDecoration(
       color: bg,
@@ -142,17 +168,17 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     return Scaffold(
       body: Stack(
         children: [
-          Container(width: double.infinity, height: double.infinity, color: isDark ? const Color(0xFF151E24) : const Color(0xFFE5E9F0)),
+          Container(width: double.infinity, height: double.infinity, color: isDark ? const Color(0xFF151E24) : const Color(0xFFF0F2F5)),
 
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(15.0),
               child: Column(
                 children: [
-                  // --- HEADER ---
+                  // --- HEADER (Z-Index diatur melalui urutan widget di Stack) ---
                   Container(
-                    padding: const EdgeInsets.all(18),
                     decoration: neuBox(),
+                    padding: const EdgeInsets.all(18),
                     child: Column(
                       children: [
                         Row(
@@ -168,16 +194,13 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                             Row(
                               children: [
                                 _buildTopIcon(isAlarmOn ? Icons.notifications_active : Icons.notifications, isAlarmOn, () {
-                                  // Tanpa Getar sesuai instruksi
                                   setState(() => isAlarmOn = true);
                                   Future.delayed(const Duration(milliseconds: 500), () => setState(() => isAlarmOn = false));
                                 }),
                                 const SizedBox(width: 10),
                                 _buildTopIcon(isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round, false, widget.onThemeToggle),
                                 const SizedBox(width: 10),
-                                _buildTopIcon(Icons.videogame_asset_rounded, isIotVisible, () {
-                                  setState(() => isIotVisible = !isIotVisible);
-                                }),
+                                _buildTopIcon(Icons.videogame_asset_rounded, isIotVisible, _toggleIotPanel),
                               ],
                             )
                           ],
@@ -199,78 +222,71 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                     ),
                   ),
 
-                  // --- KONTROL UNIT (FULL PANJANG) ---
+                  // --- KONTROL UNIT ---
                   Expanded(
-                    child: AnimatedCrossFade(
-                      duration: const Duration(milliseconds: 250),
-                      firstChild: const SizedBox(width: double.infinity),
-                      secondChild: Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(30),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 30),
-                            decoration: neuBox(borderRadius: 30),
-                            child: Column(
-                              children: [
-                                // Ukuran teks diperkecil
-                                Text("KONTROL UNIT", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: isDark ? Colors.white70 : Colors.black54)),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  height: 15,
-                                  child: PageView.builder(
-                                    controller: _vehiclePageController,
-                                    scrollDirection: Axis.vertical,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemBuilder: (context, index) => Center(child: Text(index % 2 == 0 ? "Aerox 155 VVA" : "W 3601 QY", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))),
-                                  ),
-                                ),
-                                const Spacer(),
-                                _buildStartButton(),
-                                const Spacer(),
-                                Row(
+                    child: ClipRect( 
+                      child: Stack(
+                        children: [
+                          SlideTransition(
+                            position: _panelSlideAnimation,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 15),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 30),
+                                decoration: neuBox(borderRadius: 30),
+                                child: Column(
                                   children: [
-                                    Expanded(child: _buildVerticalGridBtn(isRelayOn ? "ON" : "OFF", Icons.power_settings_new_rounded, isRelayOn, () {
-                                      _vibrateInstan(); // Getar Instan
-                                      setState(() => isRelayOn = !isRelayOn);
-                                      if (isRelayOn) _triggerScan();
-                                    })),
-                                    const SizedBox(width: 15),
-                                    Expanded(
-                                      child: Column(
-                                        children: [
-                                          _buildHoldBtn("JOK", Icons.archive_rounded, isJokActive, isRelayOn, (val) { 
-                                            if(!isRelayOn) { 
-                                              if(val) _vibrateInstan(); // Getar Instan saat mulai tekan
-                                              setState(() => isJokActive = val); 
-                                            } 
-                                          }),
-                                          const SizedBox(height: 15),
-                                          _buildHoldBtn("TANGKI", Icons.local_gas_station_rounded, isTangkiActive, isRelayOn, (val) { 
-                                            if(!isRelayOn) { 
-                                              if(val) _vibrateInstan(); // Getar Instan saat mulai tekan
-                                              setState(() => isTangkiActive = val); 
-                                            } 
-                                          }),
-                                        ],
+                                    Text("KONTROL UNIT", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: isDark ? Colors.white70 : Colors.black54)),
+                                    const SizedBox(height: 4),
+                                    SizedBox(
+                                      height: 15,
+                                      child: PageView.builder(
+                                        controller: _vehiclePageController,
+                                        scrollDirection: Axis.vertical,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        itemBuilder: (context, index) => Center(child: Text(index % 2 == 0 ? "Aerox 155 VVA" : "W 3601 QY", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))),
                                       ),
                                     ),
-                                    const SizedBox(width: 15),
-                                    Expanded(child: _buildVerticalGridBtn(isLocked ? "LOCKED" : "UNLOCK", isLocked ? Icons.lock_rounded : Icons.lock_open_rounded, isLocked, () {
-                                      if(!isRelayOn) { 
-                                        _vibrateInstan(); // Getar Instan
-                                        setState(() => isLocked = !isLocked); 
-                                      }
-                                    }, isDisabled: isRelayOn)),
+                                    const Spacer(),
+                                    _buildStartButton(),
+                                    const Spacer(),
+                                    Row(
+                                      children: [
+                                        Expanded(child: _buildVerticalGridBtn(isRelayOn ? "ON" : "OFF", Icons.power_settings_new_rounded, isRelayOn, () {
+                                          if (!isLocked) {
+                                            _vibrateInstan();
+                                            setState(() => isRelayOn = !isRelayOn);
+                                            if (isRelayOn) _triggerScan();
+                                          }
+                                        }, isDisabled: isLocked)),
+                                        const SizedBox(width: 15),
+                                        Expanded(
+                                          child: Column(
+                                            children: [
+                                              _buildHoldBtn("JOK", Icons.archive_rounded, isJokActive, isRelayOn, (val) { 
+                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isJokActive = val); } 
+                                              }),
+                                              const SizedBox(height: 15),
+                                              _buildHoldBtn("TANGKI", Icons.local_gas_station_rounded, isTangkiActive, isRelayOn, (val) { 
+                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isTangkiActive = val); } 
+                                              }),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 15),
+                                        Expanded(child: _buildVerticalGridBtn(isLocked ? "LOCKED" : "UNLOCK", isLocked ? Icons.lock_rounded : Icons.lock_open_rounded, isLocked, () {
+                                          if(!isRelayOn) { _vibrateInstan(); setState(() => isLocked = !isLocked); }
+                                        }, isDisabled: isRelayOn)),
+                                      ],
+                                    ),
                                   ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                      crossFadeState: isIotVisible ? CrossFadeState.showSecond : CrossFadeState.showFirst,
                     ),
                   ),
                 ],
@@ -284,11 +300,11 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildFloatBtn(Icons.my_location_rounded, () { setState(() => isFocusActive = true); Future.delayed(const Duration(milliseconds: 200), () => setState(() => isFocusActive = false)); }, isActive: isFocusActive),
+                  _buildFloatBtn(Icons.my_location_rounded, () { _vibrateInstan(); setState(() => isFocusActive = true); Future.delayed(const Duration(milliseconds: 200), () => setState(() => isFocusActive = false)); }, isActive: isFocusActive),
                   const SizedBox(width: 25),
-                  _buildFloatBtn(Icons.map_rounded, () { setState(() => isRouteActive = !isRouteActive); }, isActive: isRouteActive),
+                  _buildFloatBtn(Icons.map_rounded, () { _vibrateInstan(); setState(() => isRouteActive = !isRouteActive); }, isActive: isRouteActive),
                   const SizedBox(width: 25),
-                  _buildFloatBtn(Icons.explore_rounded, () { setState(() => isCompassActive = true); Future.delayed(const Duration(milliseconds: 200), () => setState(() => isCompassActive = false)); }, isActive: isCompassActive),
+                  _buildFloatBtn(Icons.explore_rounded, () { _vibrateInstan(); setState(() => isCompassActive = true); Future.delayed(const Duration(milliseconds: 200), () => setState(() => isCompassActive = false)); }, isActive: isCompassActive),
                 ],
               ),
             )
@@ -297,7 +313,6 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     );
   }
 
-  // --- WIDGETS ---
   Widget _buildStartButton() {
     return Stack(
       alignment: Alignment.center,
@@ -305,20 +320,13 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
         if (_showScanAnim)
           AnimatedBuilder(
             animation: _scanController,
-            builder: (context, child) {
-              return SizedBox(
-                width: 170, height: 170,
+            builder: (context, child) => SizedBox(
+                width: 165, height: 165,
                 child: CustomPaint(painter: DottedCirclePainter(progress: _scanController.value)),
-              );
-            },
+            ),
           ),
         GestureDetector(
-          onTapDown: (_) { 
-            if(isRelayOn) { 
-              _vibrateInstan(); // Getar Instan
-              setState(() => isStartActive = true); 
-            } 
-          },
+          onTapDown: (_) { if(isRelayOn) { _vibrateInstan(); setState(() => isStartActive = true); } },
           onTapUp: (_) => setState(() => isStartActive = false),
           onTapCancel: () => setState(() => isStartActive = false),
           child: Opacity(
@@ -342,9 +350,9 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
 
   Widget _buildVerticalGridBtn(String label, IconData icon, bool isActive, VoidCallback onTap, {bool isDisabled = false}) {
     return GestureDetector(
-      onTapDown: (_) { if(!isDisabled) onTap(); }, // Menggunakan TapDown agar getar & feedback visual instan
+      onTapDown: (_) { if(!isDisabled) onTap(); },
       child: Opacity(
-        opacity: isDisabled ? 0.4 : 1.0,
+        opacity: isDisabled ? 0.3 : 1.0,
         child: Container(
           height: 125,
           decoration: neuBox(isPressed: isActive, borderRadius: 20, isDisabled: isDisabled),
@@ -367,7 +375,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
       onTapUp: (_) => onChanged(false),
       onTapCancel: () => onChanged(false),
       child: Opacity(
-        opacity: isDisabled ? 0.4 : 1.0,
+        opacity: isDisabled ? 0.3 : 1.0,
         child: Container(
           height: 55, width: double.infinity,
           decoration: neuBox(isPressed: isActive, borderRadius: 15, isDisabled: isDisabled),
@@ -401,13 +409,11 @@ class DottedCirclePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint()
-      ..color = Colors.blueAccent.withOpacity(0.8)
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..color = Colors.blueAccent.withOpacity(0.6)
+      ..style = PaintingStyle.fill;
 
     double radius = size.width / 2;
-    int dotsCount = 40;
+    int dotsCount = 45;
     double currentArc = 2 * math.pi * progress;
 
     for (int i = 0; i < dotsCount; i++) {
@@ -415,7 +421,7 @@ class DottedCirclePainter extends CustomPainter {
       if (angle <= currentArc) {
         double x = radius + radius * math.cos(angle - math.pi / 2);
         double y = radius + radius * math.sin(angle - math.pi / 2);
-        canvas.drawCircle(Offset(x, y), 2, paint);
+        canvas.drawCircle(Offset(x, y), 1.2, paint);
       }
     }
   }
