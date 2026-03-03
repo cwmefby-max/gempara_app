@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:math' as math;
+// --- TAMBAHAN IMPORT ---
+import 'services/mqtt_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +63,10 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateMixin {
+  // --- TAMBAHAN VARIABEL MQTT ---
+  final MqttService mqtt = MqttService();
+  bool isConnected = false;
+
   bool isIotVisible = true; 
   bool isLocked = true; 
   bool isRelayOn = false;
@@ -85,12 +91,15 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
+    
+    // --- TAMBAHAN KONEKSI MQTT OTOMATIS ---
+    _initMqtt();
+
     _infoPageController = PageController(initialPage: _currentVirtualPage);
     _vehiclePageController = PageController(initialPage: _currentVirtualPage);
 
     _scanController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     
-    // Animasi dipercepat (dari 400ms ke 250ms)
     _panelController = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
     _panelSlideAnimation = Tween<Offset>(begin: const Offset(0, -1.2), end: Offset.zero).animate(
       CurvedAnimation(parent: _panelController, curve: Curves.easeOutCubic)
@@ -106,6 +115,12 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
         setState(() {});
       }
     });
+  }
+
+  // --- FUNGSI HELPER MQTT ---
+  void _initMqtt() async {
+    bool result = await mqtt.connect();
+    setState(() => isConnected = result);
   }
 
   void _vibrateInstan() {
@@ -156,7 +171,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
           color: shadowDark, 
           offset: isPressed ? const Offset(2, 2) : const Offset(6, 6), 
           blurRadius: isPressed ? 4 : 12,
-          spreadRadius: 1, // Membantu shadow terlihat lebih berisi
+          spreadRadius: 1, 
         ),
       ],
     );
@@ -177,7 +192,6 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
               padding: const EdgeInsets.all(15.0),
               child: Column(
                 children: [
-                  // --- HEADER (Z-Index Atas) ---
                   Container(
                     decoration: neuBox(),
                     padding: const EdgeInsets.all(18),
@@ -197,6 +211,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                               children: [
                                 _buildTopIcon(isAlarmOn ? Icons.notifications_active : Icons.notifications, isAlarmOn, () {
                                   setState(() => isAlarmOn = true);
+                                  // --- MQTT ALARM ---
+                                  mqtt.publishPesan('gempara/alarm', 'ON');
                                   Future.delayed(const Duration(milliseconds: 500), () => setState(() => isAlarmOn = false));
                                 }),
                                 const SizedBox(width: 10),
@@ -216,10 +232,9 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                             physics: const NeverScrollableScrollPhysics(),
                             itemBuilder: (context, index) => index % 2 == 0 
                                 ? Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("SPEED", "0 km/h"), _buildStat("JARAK", "1.2 km"), _buildStat("ETA", "4 m"), _buildStat("SUHU", "32°")])
-                                : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("BATTERY", "12.8V"), _buildStat("FUEL", "85%"), _buildStat("SIGNAL", "Online"), _buildStat("STATUS", "Aman")]),
+                                : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("BATTERY", "12.8V"), _buildStat("FUEL", "85%"), _buildStat("SIGNAL", isConnected ? "Online" : "Offline"), _buildStat("STATUS", "Aman")]),
                           ),
                         ),
-                        // NAVIGASI DOT + VERSION INFO
                         Stack(
                           alignment: Alignment.center,
                           children: [
@@ -234,9 +249,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                     ),
                   ),
 
-                  // --- KONTROL UNIT ---
                   Expanded(
-                    child: ClipRRect( // ClipRRect level 1: Untuk menyembunyikan panel saat meluncur ke atas
+                    child: ClipRRect( 
                       borderRadius: BorderRadius.circular(30),
                       child: Stack(
                         children: [
@@ -270,6 +284,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                           if (!isLocked) {
                                             _vibrateInstan();
                                             setState(() => isRelayOn = !isRelayOn);
+                                            // --- MQTT POWER ---
+                                            mqtt.publishPesan('gempara/relay', isRelayOn ? '1' : '0');
                                             if (isRelayOn) _triggerScan();
                                           }
                                         }, isDisabled: isLocked)),
@@ -278,18 +294,37 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                           child: Column(
                                             children: [
                                               _buildHoldBtn("SEAT", Icons.archive_rounded, isSeatActive, isRelayOn, (val) { 
-                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isSeatActive = val); } 
+                                                if(!isRelayOn) { 
+                                                  if(val) {
+                                                    _vibrateInstan();
+                                                    // --- MQTT SEAT ---
+                                                    mqtt.publishPesan('gempara/seat', 'OPEN');
+                                                  } 
+                                                  setState(() => isSeatActive = val); 
+                                                } 
                                               }),
                                               const SizedBox(height: 15),
                                               _buildHoldBtn("FUEL", Icons.local_gas_station_rounded, isFuelActive, isRelayOn, (val) { 
-                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isFuelActive = val); } 
+                                                if(!isRelayOn) { 
+                                                  if(val) {
+                                                    _vibrateInstan();
+                                                    // --- MQTT FUEL ---
+                                                    mqtt.publishPesan('gempara/fuel', 'OPEN');
+                                                  } 
+                                                  setState(() => isFuelActive = val); 
+                                                } 
                                               }),
                                             ],
                                           ),
                                         ),
                                         const SizedBox(width: 15),
                                         Expanded(child: _buildVerticalGridBtn(isLocked ? "LOCKED" : "UNLOCK", isLocked ? Icons.lock_rounded : Icons.lock_open_rounded, isLocked, () {
-                                          if(!isRelayOn) { _vibrateInstan(); setState(() => isLocked = !isLocked); }
+                                          if(!isRelayOn) { 
+                                            _vibrateInstan(); 
+                                            setState(() => isLocked = !isLocked); 
+                                            // --- MQTT LOCK ---
+                                            mqtt.publishPesan('gempara/lock', isLocked ? '1' : '0');
+                                          }
                                         }, isDisabled: isRelayOn)),
                                       ],
                                     ),
@@ -307,7 +342,6 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
             ),
           ),
 
-          // Tombol Navigasi Bawah (Ukuran Diperkecil)
           if (!isIotVisible)
             Positioned(
               bottom: 40, left: 0, right: 0,
@@ -327,7 +361,6 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     );
   }
 
-  // WIDGET HELPERS
   Widget _buildStartButton() {
     return Stack(
       alignment: Alignment.center,
@@ -336,12 +369,19 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
           AnimatedBuilder(
             animation: _scanController,
             builder: (context, child) => SizedBox(
-                width: 175, height: 175, // Ukuran scan diperlebar sedikit
+                width: 175, height: 175, 
                 child: CustomPaint(painter: DottedCirclePainter(progress: _scanController.value)),
             ),
           ),
         GestureDetector(
-          onTapDown: (_) { if(isRelayOn) { _vibrateInstan(); setState(() => isStartActive = true); } },
+          onTapDown: (_) { 
+            if(isRelayOn) { 
+              _vibrateInstan(); 
+              setState(() => isStartActive = true); 
+              // --- MQTT START ENGINE ---
+              mqtt.publishPesan('gempara/engine', 'START');
+            } 
+          },
           onTapUp: (_) => setState(() => isStartActive = false),
           onTapCancel: () => setState(() => isStartActive = false),
           child: Opacity(
@@ -415,7 +455,6 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
   Widget _buildDot(bool active) => Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: active ? Colors.blueAccent : Colors.grey.withOpacity(0.3)));
   Widget _buildStat(String label, String value) => Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))), Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold))]);
   
-  // UKURAN TOMBOL NAVIGASI BAWAH DIPERKECIL (dari 60 ke 50)
   Widget _buildFloatBtn(IconData icon, VoidCallback onTap, {required bool isActive}) => GestureDetector(
     onTap: onTap, 
     child: Container(
@@ -445,7 +484,6 @@ class DottedCirclePainter extends CustomPainter {
       if (angle <= currentArc) {
         double x = radius + radius * math.cos(angle - math.pi / 2);
         double y = radius + radius * math.sin(angle - math.pi / 2);
-        // UKURAN DOTTED DIPERBESAR SEDIKIT (dari 1.2 ke 2.2)
         canvas.drawCircle(Offset(x, y), 2.2, paint);
       }
     }
