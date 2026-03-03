@@ -67,8 +67,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
   bool isAlarmOn = false;
   bool isRouteActive = false;
   bool isStartActive = false;
-  bool isJokActive = false;
-  bool isTangkiActive = false;
+  bool isSeatActive = false;
+  bool isFuelActive = false;
   bool isFocusActive = false;
   bool isCompassActive = false;
 
@@ -90,9 +90,10 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
 
     _scanController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     
-    _panelController = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    // Animasi dipercepat (dari 400ms ke 250ms)
+    _panelController = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
     _panelSlideAnimation = Tween<Offset>(begin: const Offset(0, -1.2), end: Offset.zero).animate(
-      CurvedAnimation(parent: _panelController, curve: Curves.easeInOutCubic)
+      CurvedAnimation(parent: _panelController, curve: Curves.easeOutCubic)
     );
     
     if (isIotVisible) _panelController.forward();
@@ -144,8 +145,8 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     if (isDisabled) bg = bg.withOpacity(0.5);
     
     Color shadowDark = isDark 
-        ? Colors.black.withOpacity(0.35) 
-        : const Color(0xFFD1D9E6).withOpacity(0.4);
+        ? Colors.black.withOpacity(0.4) 
+        : const Color(0xFFD1D9E6).withOpacity(0.5);
 
     return BoxDecoration(
       color: bg,
@@ -153,8 +154,9 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
       boxShadow: isDisabled ? [] : [
         BoxShadow(
           color: shadowDark, 
-          offset: isPressed ? const Offset(2, 2) : const Offset(5, 5), 
-          blurRadius: isPressed ? 4 : 10,
+          offset: isPressed ? const Offset(2, 2) : const Offset(6, 6), 
+          blurRadius: isPressed ? 4 : 12,
+          spreadRadius: 1, // Membantu shadow terlihat lebih berisi
         ),
       ],
     );
@@ -175,7 +177,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
               padding: const EdgeInsets.all(15.0),
               child: Column(
                 children: [
-                  // --- HEADER (Z-Index diatur melalui urutan widget di Stack) ---
+                  // --- HEADER (Z-Index Atas) ---
                   Container(
                     decoration: neuBox(),
                     padding: const EdgeInsets.all(18),
@@ -187,7 +189,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text("SmartLock by Mefby", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : const Color(0xFF2C3E50))),
+                                Text("SmartLock", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : const Color(0xFF2C3E50))),
                                 const Text("Pati, Jawa Tengah", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
                               ],
                             ),
@@ -217,14 +219,25 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                 : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("BATTERY", "12.8V"), _buildStat("FUEL", "85%"), _buildStat("SIGNAL", "Online"), _buildStat("STATUS", "Aman")]),
                           ),
                         ),
-                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [_buildDot(activePageIndex == 0), const SizedBox(width: 6), _buildDot(activePageIndex == 1)]),
+                        // NAVIGASI DOT + VERSION INFO
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [_buildDot(activePageIndex == 0), const SizedBox(width: 6), _buildDot(activePageIndex == 1)]),
+                            Positioned(
+                              right: 0,
+                              child: Text("version 1.0.0 by Mefby", style: TextStyle(fontSize: 8, color: Colors.grey.withOpacity(0.7), fontWeight: FontWeight.bold)),
+                            )
+                          ],
+                        ),
                       ],
                     ),
                   ),
 
                   // --- KONTROL UNIT ---
                   Expanded(
-                    child: ClipRect( 
+                    child: ClipRRect( // ClipRRect level 1: Untuk menyembunyikan panel saat meluncur ke atas
+                      borderRadius: BorderRadius.circular(30),
                       child: Stack(
                         children: [
                           SlideTransition(
@@ -264,12 +277,12 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                         Expanded(
                                           child: Column(
                                             children: [
-                                              _buildHoldBtn("JOK", Icons.archive_rounded, isJokActive, isRelayOn, (val) { 
-                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isJokActive = val); } 
+                                              _buildHoldBtn("SEAT", Icons.archive_rounded, isSeatActive, isRelayOn, (val) { 
+                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isSeatActive = val); } 
                                               }),
                                               const SizedBox(height: 15),
-                                              _buildHoldBtn("TANGKI", Icons.local_gas_station_rounded, isTangkiActive, isRelayOn, (val) { 
-                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isTangkiActive = val); } 
+                                              _buildHoldBtn("FUEL", Icons.local_gas_station_rounded, isFuelActive, isRelayOn, (val) { 
+                                                if(!isRelayOn) { if(val) _vibrateInstan(); setState(() => isFuelActive = val); } 
                                               }),
                                             ],
                                           ),
@@ -294,6 +307,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
             ),
           ),
 
+          // Tombol Navigasi Bawah (Ukuran Diperkecil)
           if (!isIotVisible)
             Positioned(
               bottom: 40, left: 0, right: 0,
@@ -313,6 +327,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     );
   }
 
+  // WIDGET HELPERS
   Widget _buildStartButton() {
     return Stack(
       alignment: Alignment.center,
@@ -321,7 +336,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
           AnimatedBuilder(
             animation: _scanController,
             builder: (context, child) => SizedBox(
-                width: 165, height: 165,
+                width: 175, height: 175, // Ukuran scan diperlebar sedikit
                 child: CustomPaint(painter: DottedCirclePainter(progress: _scanController.value)),
             ),
           ),
@@ -399,7 +414,16 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
 
   Widget _buildDot(bool active) => Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: active ? Colors.blueAccent : Colors.grey.withOpacity(0.3)));
   Widget _buildStat(String label, String value) => Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))), Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold))]);
-  Widget _buildFloatBtn(IconData icon, VoidCallback onTap, {required bool isActive}) => GestureDetector(onTap: onTap, child: Container(width: 60, height: 60, decoration: neuBox(isPressed: isActive, borderRadius: 30), child: Icon(icon, size: 24, color: isActive ? Colors.blueAccent : (widget.isDark ? Colors.white : const Color(0xFF2C3E50)))));
+  
+  // UKURAN TOMBOL NAVIGASI BAWAH DIPERKECIL (dari 60 ke 50)
+  Widget _buildFloatBtn(IconData icon, VoidCallback onTap, {required bool isActive}) => GestureDetector(
+    onTap: onTap, 
+    child: Container(
+      width: 50, height: 50, 
+      decoration: neuBox(isPressed: isActive, borderRadius: 25), 
+      child: Icon(icon, size: 20, color: isActive ? Colors.blueAccent : (widget.isDark ? Colors.white : const Color(0xFF2C3E50)))
+    )
+  );
 }
 
 class DottedCirclePainter extends CustomPainter {
@@ -421,7 +445,8 @@ class DottedCirclePainter extends CustomPainter {
       if (angle <= currentArc) {
         double x = radius + radius * math.cos(angle - math.pi / 2);
         double y = radius + radius * math.sin(angle - math.pi / 2);
-        canvas.drawCircle(Offset(x, y), 1.2, paint);
+        // UKURAN DOTTED DIPERBESAR SEDIKIT (dari 1.2 ke 2.2)
+        canvas.drawCircle(Offset(x, y), 2.2, paint);
       }
     }
   }
