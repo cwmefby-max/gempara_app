@@ -23,6 +23,11 @@ jobs:
       - run: rm temp_app/lib/main.dart
       - run: rm temp_app/pubspec.yaml
 
+      # 2.5 PENYUNTIKAN IZIN INTERNET (Sangat Penting untuk MQTT)
+      # Perintah ini menyisipkan permission INTERNET tepat sebelum tag <application>
+      - run: |
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' temp_app/android/app/src/main/AndroidManifest.xml
+
       # 3. Salin SEMUA file kodingan DAN pubspec.yaml milikmu ke project
       - run: cp -r lib/* temp_app/lib/
       - run: cp pubspec.yaml temp_app/
