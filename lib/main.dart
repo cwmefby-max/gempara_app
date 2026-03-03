@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   runApp(const GemparaApp());
 }
 
@@ -10,16 +16,14 @@ class GemparaApp extends StatefulWidget {
   const GemparaApp({super.key});
 
   @override
-  State<GemparaApp> createState() => _GemparaAppState();
+  State<GemparaApp> createState() => _GemparaAppStage();
 }
 
-class _GemparaAppState extends State<GemparaApp> {
+class _GemparaAppStage extends State<GemparaApp> {
   bool isDarkMode = false;
 
   void toggleTheme() {
-    setState(() {
-      isDarkMode = !isDarkMode;
-    });
+    setState(() => isDarkMode = !isDarkMode);
   }
 
   @override
@@ -32,16 +36,8 @@ class _GemparaAppState extends State<GemparaApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF0F3F7),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1E272E),
-        useMaterial3: true,
-      ),
+      theme: ThemeData(brightness: Brightness.light, scaffoldBackgroundColor: const Color(0xFFF0F3F7), useMaterial3: true),
+      darkTheme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: const Color(0xFF1E272E), useMaterial3: true),
       home: MainNavigator(onThemeToggle: toggleTheme, isDark: isDarkMode),
     );
   }
@@ -56,7 +52,7 @@ class MainNavigator extends StatefulWidget {
   State<MainNavigator> createState() => _MainNavigatorState();
 }
 
-class _MainNavigatorState extends State<MainNavigator> {
+class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateMixin {
   bool isIotVisible = true; 
   bool isLocked = false;
   bool isRelayOn = false;
@@ -65,6 +61,11 @@ class _MainNavigatorState extends State<MainNavigator> {
   bool isStartActive = false;
   bool isJokActive = false;
   bool isTangkiActive = false;
+  bool isFocusActive = false;
+  bool isCompassActive = false;
+
+  late AnimationController _scanController;
+  bool _showScanAnim = false;
 
   late PageController _infoPageController;
   late PageController _vehiclePageController;
@@ -77,6 +78,9 @@ class _MainNavigatorState extends State<MainNavigator> {
     _infoPageController = PageController(initialPage: _currentVirtualPage);
     _vehiclePageController = PageController(initialPage: _currentVirtualPage);
 
+    // Animasi scan dibuat lebih cepat (dari 1500ms ke 800ms)
+    _scanController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+
     _globalTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
         _currentVirtualPage++;
@@ -87,17 +91,32 @@ class _MainNavigatorState extends State<MainNavigator> {
     });
   }
 
+  // Fungsi getar instan
+  void _vibrateInstan() {
+    HapticFeedback.lightImpact(); // Light impact lebih responsif untuk klik cepat
+  }
+
+  void _triggerScan() async {
+    setState(() => _showScanAnim = true);
+    await _scanController.forward();
+    await _scanController.reverse();
+    setState(() => _showScanAnim = false);
+  }
+
   @override
   void dispose() {
     _globalTimer?.cancel();
+    _scanController.dispose();
     _infoPageController.dispose();
     _vehiclePageController.dispose();
     super.dispose();
   }
 
-  BoxDecoration neuBox({bool isPressed = false, double borderRadius = 20}) {
+  BoxDecoration neuBox({bool isPressed = false, double borderRadius = 20, bool isDisabled = false}) {
     bool isDark = widget.isDark;
     Color bg = isDark ? const Color(0xFF1E272E) : const Color(0xFFF0F3F7);
+    if (isDisabled) bg = bg.withOpacity(0.5);
+    
     Color shadowDark = isDark 
         ? Colors.black.withOpacity(0.35) 
         : const Color(0xFF9EA7B3).withOpacity(0.25);
@@ -105,7 +124,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     return BoxDecoration(
       color: bg,
       borderRadius: BorderRadius.circular(borderRadius),
-      boxShadow: [
+      boxShadow: isDisabled ? [] : [
         BoxShadow(
           color: shadowDark, 
           offset: isPressed ? const Offset(2, 2) : const Offset(5, 5), 
@@ -123,18 +142,14 @@ class _MainNavigatorState extends State<MainNavigator> {
     return Scaffold(
       body: Stack(
         children: [
-          Container(
-            width: double.infinity, height: double.infinity,
-            color: isDark ? const Color(0xFF151E24) : const Color(0xFFE5E9F0),
-            child: Center(child: Opacity(opacity: 0.05, child: Icon(Icons.map_rounded, size: 200, color: isDark ? Colors.white : Colors.black))),
-          ),
+          Container(width: double.infinity, height: double.infinity, color: isDark ? const Color(0xFF151E24) : const Color(0xFFE5E9F0)),
 
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(15.0),
               child: Column(
                 children: [
-                  // --- NAVIGASI UTAMA ---
+                  // --- HEADER ---
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: neuBox(),
@@ -153,13 +168,16 @@ class _MainNavigatorState extends State<MainNavigator> {
                             Row(
                               children: [
                                 _buildTopIcon(isAlarmOn ? Icons.notifications_active : Icons.notifications, isAlarmOn, () {
+                                  // Tanpa Getar sesuai instruksi
                                   setState(() => isAlarmOn = true);
                                   Future.delayed(const Duration(milliseconds: 500), () => setState(() => isAlarmOn = false));
                                 }),
                                 const SizedBox(width: 10),
                                 _buildTopIcon(isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round, false, widget.onThemeToggle),
                                 const SizedBox(width: 10),
-                                _buildTopIcon(Icons.videogame_asset_rounded, isIotVisible, () => setState(() => isIotVisible = !isIotVisible)),
+                                _buildTopIcon(Icons.videogame_asset_rounded, isIotVisible, () {
+                                  setState(() => isIotVisible = !isIotVisible);
+                                }),
                               ],
                             )
                           ],
@@ -171,78 +189,89 @@ class _MainNavigatorState extends State<MainNavigator> {
                           child: PageView.builder(
                             controller: _infoPageController,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemBuilder: (context, index) {
-                              int realIndex = index % 2;
-                              return realIndex == 0 
+                            itemBuilder: (context, index) => index % 2 == 0 
                                 ? Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("SPEED", "0 km/h"), _buildStat("JARAK", "1.2 km"), _buildStat("ETA", "4 m"), _buildStat("SUHU", "32°")])
-                                : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("BATTERY", "12.8V"), _buildStat("FUEL", "85%"), _buildStat("SIGNAL", "Online"), _buildStat("STATUS", "Aman")]);
-                            },
+                                : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildStat("BATTERY", "12.8V"), _buildStat("FUEL", "85%"), _buildStat("SIGNAL", "Online"), _buildStat("STATUS", "Aman")]),
                           ),
                         ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildDot(activePageIndex == 0),
-                            const SizedBox(width: 6),
-                            _buildDot(activePageIndex == 1),
-                          ],
-                        )
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [_buildDot(activePageIndex == 0), const SizedBox(width: 6), _buildDot(activePageIndex == 1)]),
                       ],
                     ),
                   ),
 
-                  // --- PERBAIKAN SHADOW LANCIP DI SINI ---
-                  AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 250),
-                    firstChild: const SizedBox(width: double.infinity),
-                    secondChild: Padding(
-                      padding: const EdgeInsets.only(top: 15),
-                      // ClipRRect memastikan shadow tidak bocor di sudut yang lancip
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(30),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(25),
-                          decoration: neuBox(borderRadius: 30),
-                          child: Column(
-                            children: [
-                              Text("KONTROL UNIT", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2, color: isDark ? Colors.white : Colors.black87)),
-                              const SizedBox(height: 4),
-                              SizedBox(
-                                height: 15,
-                                child: PageView.builder(
-                                  controller: _vehiclePageController,
-                                  scrollDirection: Axis.vertical,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemBuilder: (context, index) => Center(child: Text(index % 2 == 0 ? "Aerox 155 VVA" : "W 3601 QY", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))),
-                                ),
-                              ),
-                              const SizedBox(height: 30),
-                              _buildStartButton(),
-                              const SizedBox(height: 30),
-                              Row(
-                                children: [
-                                  Expanded(child: _buildVerticalGridBtn(isRelayOn ? "ON" : "OFF", Icons.power_settings_new_rounded, isRelayOn, () => setState(() => isRelayOn = !isRelayOn))),
-                                  const SizedBox(width: 15),
-                                  Expanded(
-                                    child: Column(
-                                      children: [
-                                        _buildHoldBtn("JOK", Icons.archive_rounded, isJokActive, (val) => setState(() => isJokActive = val)),
-                                        const SizedBox(height: 15),
-                                        _buildHoldBtn("TANGKI", Icons.local_gas_station_rounded, isTangkiActive, (val) => setState(() => isTangkiActive = val)),
-                                      ],
-                                    ),
+                  // --- KONTROL UNIT (FULL PANJANG) ---
+                  Expanded(
+                    child: AnimatedCrossFade(
+                      duration: const Duration(milliseconds: 250),
+                      firstChild: const SizedBox(width: double.infinity),
+                      secondChild: Padding(
+                        padding: const EdgeInsets.only(top: 15),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(30),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 30),
+                            decoration: neuBox(borderRadius: 30),
+                            child: Column(
+                              children: [
+                                // Ukuran teks diperkecil
+                                Text("KONTROL UNIT", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: isDark ? Colors.white70 : Colors.black54)),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: 15,
+                                  child: PageView.builder(
+                                    controller: _vehiclePageController,
+                                    scrollDirection: Axis.vertical,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemBuilder: (context, index) => Center(child: Text(index % 2 == 0 ? "Aerox 155 VVA" : "W 3601 QY", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))),
                                   ),
-                                  const SizedBox(width: 15),
-                                  Expanded(child: _buildVerticalGridBtn(isLocked ? "LOCKED" : "UNLOCK", isLocked ? Icons.lock_rounded : Icons.lock_open_rounded, isLocked, () => setState(() => isLocked = !isLocked))),
-                                ],
-                              ),
-                            ],
+                                ),
+                                const Spacer(),
+                                _buildStartButton(),
+                                const Spacer(),
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildVerticalGridBtn(isRelayOn ? "ON" : "OFF", Icons.power_settings_new_rounded, isRelayOn, () {
+                                      _vibrateInstan(); // Getar Instan
+                                      setState(() => isRelayOn = !isRelayOn);
+                                      if (isRelayOn) _triggerScan();
+                                    })),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child: Column(
+                                        children: [
+                                          _buildHoldBtn("JOK", Icons.archive_rounded, isJokActive, isRelayOn, (val) { 
+                                            if(!isRelayOn) { 
+                                              if(val) _vibrateInstan(); // Getar Instan saat mulai tekan
+                                              setState(() => isJokActive = val); 
+                                            } 
+                                          }),
+                                          const SizedBox(height: 15),
+                                          _buildHoldBtn("TANGKI", Icons.local_gas_station_rounded, isTangkiActive, isRelayOn, (val) { 
+                                            if(!isRelayOn) { 
+                                              if(val) _vibrateInstan(); // Getar Instan saat mulai tekan
+                                              setState(() => isTangkiActive = val); 
+                                            } 
+                                          }),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(child: _buildVerticalGridBtn(isLocked ? "LOCKED" : "UNLOCK", isLocked ? Icons.lock_rounded : Icons.lock_open_rounded, isLocked, () {
+                                      if(!isRelayOn) { 
+                                        _vibrateInstan(); // Getar Instan
+                                        setState(() => isLocked = !isLocked); 
+                                      }
+                                    }, isDisabled: isRelayOn)),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
+                      crossFadeState: isIotVisible ? CrossFadeState.showSecond : CrossFadeState.showFirst,
                     ),
-                    crossFadeState: isIotVisible ? CrossFadeState.showSecond : CrossFadeState.showFirst,
                   ),
                 ],
               ),
@@ -251,15 +280,15 @@ class _MainNavigatorState extends State<MainNavigator> {
 
           if (!isIotVisible)
             Positioned(
-              bottom: 30, left: 0, right: 0,
+              bottom: 40, left: 0, right: 0,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildFloatBtn(Icons.my_location_rounded, () {}, isActive: false),
+                  _buildFloatBtn(Icons.my_location_rounded, () { setState(() => isFocusActive = true); Future.delayed(const Duration(milliseconds: 200), () => setState(() => isFocusActive = false)); }, isActive: isFocusActive),
                   const SizedBox(width: 25),
-                  _buildFloatBtn(Icons.map_rounded, () => setState(() => isRouteActive = !isRouteActive), isActive: isRouteActive),
+                  _buildFloatBtn(Icons.map_rounded, () { setState(() => isRouteActive = !isRouteActive); }, isActive: isRouteActive),
                   const SizedBox(width: 25),
-                  _buildFloatBtn(Icons.explore_rounded, () {}, isActive: false),
+                  _buildFloatBtn(Icons.explore_rounded, () { setState(() => isCompassActive = true); Future.delayed(const Duration(milliseconds: 200), () => setState(() => isCompassActive = false)); }, isActive: isCompassActive),
                 ],
               ),
             )
@@ -268,84 +297,129 @@ class _MainNavigatorState extends State<MainNavigator> {
     );
   }
 
-  // --- WIDGET HELPER ---
+  // --- WIDGETS ---
+  Widget _buildStartButton() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (_showScanAnim)
+          AnimatedBuilder(
+            animation: _scanController,
+            builder: (context, child) {
+              return SizedBox(
+                width: 170, height: 170,
+                child: CustomPaint(painter: DottedCirclePainter(progress: _scanController.value)),
+              );
+            },
+          ),
+        GestureDetector(
+          onTapDown: (_) { 
+            if(isRelayOn) { 
+              _vibrateInstan(); // Getar Instan
+              setState(() => isStartActive = true); 
+            } 
+          },
+          onTapUp: (_) => setState(() => isStartActive = false),
+          onTapCancel: () => setState(() => isStartActive = false),
+          child: Opacity(
+            opacity: isRelayOn ? 1.0 : 0.4,
+            child: Container(
+              width: 140, height: 140,
+              decoration: neuBox(isPressed: isStartActive, borderRadius: 80, isDisabled: !isRelayOn),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.bolt_rounded, color: isStartActive ? Colors.greenAccent : (widget.isDark ? Colors.white : Colors.black54), size: 60),
+                  const Text("START ENGINE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerticalGridBtn(String label, IconData icon, bool isActive, VoidCallback onTap, {bool isDisabled = false}) {
+    return GestureDetector(
+      onTapDown: (_) { if(!isDisabled) onTap(); }, // Menggunakan TapDown agar getar & feedback visual instan
+      child: Opacity(
+        opacity: isDisabled ? 0.4 : 1.0,
+        child: Container(
+          height: 125,
+          decoration: neuBox(isPressed: isActive, borderRadius: 20, isDisabled: isDisabled),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 30, color: isActive ? const Color(0xFFFF7675) : (widget.isDark ? Colors.white70 : Colors.black54)),
+              const SizedBox(height: 10),
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHoldBtn(String label, IconData icon, bool isActive, bool isDisabled, Function(bool) onChanged) {
+    return GestureDetector(
+      onTapDown: (_) => onChanged(true),
+      onTapUp: (_) => onChanged(false),
+      onTapCancel: () => onChanged(false),
+      child: Opacity(
+        opacity: isDisabled ? 0.4 : 1.0,
+        child: Container(
+          height: 55, width: double.infinity,
+          decoration: neuBox(isPressed: isActive, borderRadius: 15, isDisabled: isDisabled),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: isActive ? Colors.orangeAccent : (widget.isDark ? Colors.white70 : Colors.black54)),
+              const SizedBox(width: 10),
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTopIcon(IconData icon, bool active, VoidCallback onTap) => GestureDetector(
     onTap: onTap,
-    child: Container(
-      width: 42, height: 42,
-      decoration: neuBox(isPressed: active, borderRadius: 12),
-      child: Icon(icon, size: 20, color: active ? const Color(0xFFFF7675) : (widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
-    ),
+    child: Container(width: 42, height: 42, decoration: neuBox(isPressed: active, borderRadius: 12), child: Icon(icon, size: 20, color: active ? const Color(0xFFFF7675) : (widget.isDark ? Colors.white : const Color(0xFF2C3E50)))),
   );
 
   Widget _buildDot(bool active) => Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: active ? Colors.blueAccent : Colors.grey.withOpacity(0.3)));
+  Widget _buildStat(String label, String value) => Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))), Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold))]);
+  Widget _buildFloatBtn(IconData icon, VoidCallback onTap, {required bool isActive}) => GestureDetector(onTap: onTap, child: Container(width: 60, height: 60, decoration: neuBox(isPressed: isActive, borderRadius: 30), child: Icon(icon, size: 24, color: isActive ? Colors.blueAccent : (widget.isDark ? Colors.white : const Color(0xFF2C3E50)))));
+}
 
-  Widget _buildStat(String label, String value) => Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
-      Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold)),
-    ],
-  );
+class DottedCirclePainter extends CustomPainter {
+  final double progress;
+  DottedCirclePainter({required this.progress});
 
-  Widget _buildStartButton() => GestureDetector(
-    onTapDown: (_) => setState(() => isStartActive = true),
-    onTapUp: (_) => setState(() => isStartActive = false),
-    onTapCancel: () => setState(() => isStartActive = false),
-    child: Container(
-      width: 140, height: 140,
-      decoration: neuBox(isPressed: isStartActive, borderRadius: 80),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.bolt_rounded, color: isStartActive ? Colors.greenAccent : (widget.isDark ? Colors.white : Colors.black54), size: 60),
-          const Text("START ENGINE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    ),
-  );
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = Colors.blueAccent.withOpacity(0.8)
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-  Widget _buildVerticalGridBtn(String label, IconData icon, bool isActive, VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      height: 125,
-      decoration: neuBox(isPressed: isActive, borderRadius: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 30, color: isActive ? const Color(0xFFFF7675) : (widget.isDark ? Colors.white70 : Colors.black54)),
-          const SizedBox(height: 10),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
-        ],
-      ),
-    ),
-  );
+    double radius = size.width / 2;
+    int dotsCount = 40;
+    double currentArc = 2 * math.pi * progress;
 
-  Widget _buildHoldBtn(String label, IconData icon, bool isActive, Function(bool) onChanged) => GestureDetector(
-    onTapDown: (_) => onChanged(true),
-    onTapUp: (_) => onChanged(false),
-    onTapCancel: () => onChanged(false),
-    child: Container(
-      height: 55,
-      width: double.infinity,
-      decoration: neuBox(isPressed: isActive, borderRadius: 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 20, color: isActive ? Colors.orangeAccent : (widget.isDark ? Colors.white70 : Colors.black54)),
-          const SizedBox(width: 10),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
-        ],
-      ),
-    ),
-  );
+    for (int i = 0; i < dotsCount; i++) {
+      double angle = (2 * math.pi / dotsCount) * i;
+      if (angle <= currentArc) {
+        double x = radius + radius * math.cos(angle - math.pi / 2);
+        double y = radius + radius * math.sin(angle - math.pi / 2);
+        canvas.drawCircle(Offset(x, y), 2, paint);
+      }
+    }
+  }
 
-  Widget _buildFloatBtn(IconData icon, VoidCallback onTap, {required bool isActive}) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 60, height: 60,
-      decoration: neuBox(isPressed: isActive, borderRadius: 30),
-      child: Icon(icon, size: 24, color: isActive ? Colors.blueAccent : (widget.isDark ? Colors.white : const Color(0xFF2C3E50))),
-    ),
-  );
+  @override
+  bool shouldRepaint(DottedCirclePainter oldDelegate) => oldDelegate.progress != progress;
 }
