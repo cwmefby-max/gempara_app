@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:math' as math;
-// --- TAMBAHAN IMPORT ---
+// --- IMPORT SERVICE ---
 import 'services/mqtt_service.dart';
 
 void main() {
@@ -63,7 +63,7 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateMixin {
-  // --- TAMBAHAN VARIABEL MQTT ---
+  // --- INTEGRASI MQTT ---
   final MqttService mqtt = MqttService();
   bool isConnected = false;
 
@@ -92,7 +92,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
   void initState() {
     super.initState();
     
-    // --- TAMBAHAN KONEKSI MQTT OTOMATIS ---
+    // --- KONEKSI MQTT OTOMATIS SAAT START ---
     _initMqtt();
 
     _infoPageController = PageController(initialPage: _currentVirtualPage);
@@ -117,10 +117,12 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     });
   }
 
-  // --- FUNGSI HELPER MQTT ---
+  // --- FUNGSI INIT MQTT ---
   void _initMqtt() async {
     bool result = await mqtt.connect();
-    setState(() => isConnected = result);
+    if (mounted) {
+      setState(() => isConnected = result);
+    }
   }
 
   void _vibrateInstan() {
@@ -151,6 +153,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
     _panelController.dispose();
     _infoPageController.dispose();
     _vehiclePageController.dispose();
+    mqtt.disconnect(); // Putuskan koneksi saat aplikasi ditutup
     super.dispose();
   }
 
@@ -212,7 +215,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                 _buildTopIcon(isAlarmOn ? Icons.notifications_active : Icons.notifications, isAlarmOn, () {
                                   setState(() => isAlarmOn = true);
                                   // --- MQTT ALARM ---
-                                  mqtt.publishPesan('gempara/alarm', 'ON');
+                                  mqtt.publishPesan('alarm', 'ON');
                                   Future.delayed(const Duration(milliseconds: 500), () => setState(() => isAlarmOn = false));
                                 }),
                                 const SizedBox(width: 10),
@@ -285,7 +288,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                             _vibrateInstan();
                                             setState(() => isRelayOn = !isRelayOn);
                                             // --- MQTT POWER ---
-                                            mqtt.publishPesan('gempara/relay', isRelayOn ? '1' : '0');
+                                            mqtt.publishPesan('relay', isRelayOn ? '1' : '0');
                                             if (isRelayOn) _triggerScan();
                                           }
                                         }, isDisabled: isLocked)),
@@ -298,7 +301,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                                   if(val) {
                                                     _vibrateInstan();
                                                     // --- MQTT SEAT ---
-                                                    mqtt.publishPesan('gempara/seat', 'OPEN');
+                                                    mqtt.publishPesan('seat', 'OPEN');
                                                   } 
                                                   setState(() => isSeatActive = val); 
                                                 } 
@@ -309,7 +312,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                                   if(val) {
                                                     _vibrateInstan();
                                                     // --- MQTT FUEL ---
-                                                    mqtt.publishPesan('gempara/fuel', 'OPEN');
+                                                    mqtt.publishPesan('fuel', 'OPEN');
                                                   } 
                                                   setState(() => isFuelActive = val); 
                                                 } 
@@ -323,7 +326,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
                                             _vibrateInstan(); 
                                             setState(() => isLocked = !isLocked); 
                                             // --- MQTT LOCK ---
-                                            mqtt.publishPesan('gempara/lock', isLocked ? '1' : '0');
+                                            mqtt.publishPesan('lock', isLocked ? '1' : '0');
                                           }
                                         }, isDisabled: isRelayOn)),
                                       ],
@@ -379,7 +382,7 @@ class _MainNavigatorState extends State<MainNavigator> with TickerProviderStateM
               _vibrateInstan(); 
               setState(() => isStartActive = true); 
               // --- MQTT START ENGINE ---
-              mqtt.publishPesan('gempara/engine', 'START');
+              mqtt.publishPesan('engine', 'START');
             } 
           },
           onTapUp: (_) => setState(() => isStartActive = false),
