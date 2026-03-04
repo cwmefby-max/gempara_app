@@ -6,42 +6,41 @@ class MqttService {
   late MqttServerClient client;
 
   Future<bool> connect() async {
-    // ID unik menggunakan timestamp agar tidak bentrok dengan perangkat lain
-    String clientIdentifier = 'gempara_app_${DateTime.now().millisecondsSinceEpoch}';
+    // ID Unik sangat penting (Sesuai dokumentasi HiveMQ)
+    String identifier = 'gempara_mobile_${DateTime.now().millisecondsSinceEpoch}';
     
-    // Pastikan URL bersih tanpa mqtt://
-    client = MqttServerClient('1ff784315caf430e9d7329650ca769b5.s1.eu.hivemq.cloud', clientIdentifier);
+    // Inisialisasi sesuai panduan
+    client = MqttServerClient('1ff784315caf430e9d7329650ca769b5.s1.eu.hivemq.cloud', identifier);
     
     client.port = 8883; 
-    client.secure = true;
-    client.logging(on: true); // Aktifkan log untuk melihat proses di console
+    client.secure = true; // Mengaktifkan TLS
+    client.setProtocolV311(); // Protokol standar HiveMQ Cloud
     client.keepAlivePeriod = 20;
 
-    // Sangat penting untuk HiveMQ Cloud agar SSL tidak ditolak Android
+    // Bagian ini wajib untuk Android agar tidak memblokir sertifikat SSL HiveMQ
     client.onBadCertificate = (dynamic cert) => true;
 
     final connMessage = MqttConnectMessage()
-        .withClientIdentifier(clientIdentifier)
-        .authenticateAs('mefby', 'Arema1987.') // Pastikan user & pass ini sesuai di Access Management
+        .withClientIdentifier(identifier)
+        .authenticateAs('mefby', 'Arema1987.') // Pastikan ini sama dengan di Access Management
         .startClean()
         .withWillQos(MqttQos.atLeastOnce);
 
     client.connectionMessage = connMessage;
 
     try {
-      print('Menghubungkan ke HiveMQ dengan ID: $clientIdentifier');
+      print('Mencoba koneksi sesuai panduan HiveMQ...');
       await client.connect();
     } catch (e) {
-      print('Koneksi Gagal: $e');
+      print('Gagal koneksi: $e');
       client.disconnect();
       return false;
     }
 
     if (client.connectionStatus!.state == MqttConnectionState.connected) {
-      print('Koneksi Berhasil!');
+      print('BERHASIL TERHUBUNG!');
       return true;
     } else {
-      print('Status Koneksi: ${client.connectionStatus!.state}');
       client.disconnect();
       return false;
     }
@@ -52,9 +51,6 @@ class MqttService {
       final builder = MqttClientPayloadBuilder();
       builder.addString(message);
       client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
-      print('Pesan Terkirim: $message ke $topic');
-    } else {
-      print('Gagal mengirim: MQTT tidak terkoneksi');
     }
   }
 }
